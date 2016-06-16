@@ -1,0 +1,76 @@
+#coding: utf-8
+
+from scrapy.http import Request
+from scrapy.contrib.spiders import CrawlSpider, Rule
+from scrapy.contrib.linkextractors.sgml import SgmlLinkExtractor
+from scrapy.selector import Selector
+import re
+import datetime
+
+from lagou.items import LagouItem
+
+class LagouSpider(CrawlSpider):
+    name = "lagou"
+    allowed_domains = ["www.lagou.com"]
+    download_dalay = 2
+    start_urls = [
+        "http://www.lagou.com"
+    ]
+    rules = (
+        #Rule(SgmlLinkExtractor(allow=(r'http://www.lagou.com/jobs/list_\?.*px=new&hy=%E7%A7%BB%E5%8A%A8%E4%BA%92%E8%81%94%E7%BD%91&city=%E5%85%A8%E5%9B%BD', )), callback='parse_item', follow=True),
+        Rule(SgmlLinkExtractor(allow=(r'http://www.lagou.com/jobs/\d+\.html', )), callback='parse_item', follow=True),
+    )
+
+    def parse_item(self, response):
+        sel = Selector(response)
+        lagou = LagouItem()
+
+        post_info = sel.xpath('//dd[@class="job_request"]//p[3]/text()').extract()[0]
+        lagou['postSource'] = post_info.split(' ')[1]
+        print lagou['postSource']
+        lagou['sourceUrl'] = response.url
+
+        date = re.findall('\d+',post_info)
+        if len(date) == 1:
+            days = int(date[0])
+            posttime = datetime.date.today() - datetime.timedelta(days)
+        elif len(date) == 3:
+            posttime = datetime.date(int(date[0]),int(date[1]),int(date[2]))
+        else:
+            posttime = datetime.date.today()
+        posttime_str = posttime.strftime('%Y-%m-%d')
+        lagou['postTime'] = posttime_str
+
+
+        lagou['locality'] = sel.xpath('//dd[@class="job_request"]//p[1]/span[2]/text()').extract()[0]
+        lagou['position'] = sel.xpath('//dl[@class="job_detail"]/dt/h1/@title').extract()[0]
+        lagou['department'] = sel.xpath('//dl[@class="job_detail"]/dt/h1/div/text()').extract()[0]
+        lagou['company'] = sel.xpath('//dl[@class="job_company"]/dt//h2/text()').extract()[0].lstrip().rstrip()
+        lagou['salary'] = sel.xpath('/html/body/div[2]/div[1]/dl[1]/dd[1]/p[1]/span[1]/text()').extract()[0].lstrip().rstrip()
+        lagou['companyspace'] = ''.join(sel.xpath('//*[@id="container"]/div[2]/dl/dd/ul[1]/li[1]/text()').extract()).strip()
+        lagou['experience'] = ''.join(sel.xpath('//*[@id="job_detail"]/dd[1]/p[1]/span[3]/text()').extract()).strip()
+        print lagou['salary']
+
+        descriptionRaw = sel.xpath('//dd[@class="job_bt"]//p/text()').extract()
+        description = ''
+        for p in descriptionRaw :
+            description += p
+        lagou['description'] = description
+
+
+        lagou['education'] = sel.xpath('//dd[@class="job_request"]/p[1]/span[4]/text()').extract()[0]
+        lagou['fulltime'] = sel.xpath('//dd[@class="job_request"]/p[1]/span[5]/text()').extract()[0]
+
+        # lagou['advantage'] = sel.xpath('//dd[@class="job_request"]/p[2]/text()').extract()
+        # lagou['companyUrl'] = sel.xpath('//dl[@class="job_company"]/dd/ul[1]/li[3]/a/@href').extract()[0]
+        # lagou['address'] = sel.xpath('//dl[@class="job_company"]/dd/div[1]/text()').extract()[0]
+
+        # lagou['workYearMin'] = lagou['workYearMax'] = 0
+        # workYear = sel.xpath('//dd[@class="job_request"]/p[1]/span[3]/text()').extract()[0]
+        # workYearMinMax = re.findall('\d+',workYear)
+        # if len(workYearMinMax):
+        #     workYearMinMax = [int(i) for i in workYearMinMax]
+        # lagou['workYearMin'] = min(workYearMinMax)
+        # lagou['workYearMax'] = max(workYearMinMax)
+
+        yield lagou
